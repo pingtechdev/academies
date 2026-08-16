@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const levelFormSchema = z.object({
   name: z.string().min(1, "Level name is required"),
@@ -53,6 +61,7 @@ const userFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  role_id: z.string().min(1, "Role is required"),
 });
 
 type LevelFormData = z.infer<typeof levelFormSchema>;
@@ -60,6 +69,10 @@ type UserFormData = z.infer<typeof userFormSchema>;
 
 const Settings = () => {
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canManageLevels = hasPermission("levels:manage");
+  const canManageUsers = hasPermission("users:manage");
+  const canManageRoles = hasPermission("roles:manage");
   const queryClient = useQueryClient();
   const [showLevelDialog, setShowLevelDialog] = useState(false);
   const [showUserDialog, setShowUserDialog] = useState(false);
@@ -72,10 +85,18 @@ const Settings = () => {
     queryFn: () => apiClient.getLevels(),
   });
 
-  // Fetch users
+  // Fetch users (requires users:manage -- skip the request entirely otherwise)
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiClient.getUsers(),
+    enabled: canManageUsers,
+  });
+
+  // Fetch roles, for assigning a role when adding a user (requires roles:manage)
+  const { data: roles = [] } = useQuery({
+    queryKey: ["roles"],
+    queryFn: () => apiClient.getRoles(),
+    enabled: canManageUsers && canManageRoles,
   });
 
   // Level form
@@ -94,6 +115,7 @@ const Settings = () => {
       name: "",
       username: "",
       password: "",
+      role_id: "",
     },
   });
 
@@ -153,7 +175,7 @@ const Settings = () => {
         name: data.name,
         username: data.username,
         password: data.password,
-        role: "admin",
+        role_ids: [data.role_id],
       });
     },
     onSuccess: () => {
@@ -215,10 +237,12 @@ const Settings = () => {
                 Manage skill levels for children. These levels will appear in the child registration form.
               </CardDescription>
             </div>
-            <Button variant="hero" onClick={() => setShowLevelDialog(true)} className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Level
-            </Button>
+            {canManageLevels && (
+              <Button variant="hero" onClick={() => setShowLevelDialog(true)} className="w-full sm:w-auto">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Level
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -234,7 +258,7 @@ const Settings = () => {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {canManageLevels && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -251,16 +275,18 @@ const Settings = () => {
                       <TableCell className="text-muted-foreground">
                         {level.description || "-"}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteLevel(level.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
+                      {canManageLevels && (
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteLevel(level.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}
@@ -273,6 +299,7 @@ const Settings = () => {
       </Card>
 
       {/* Users Section */}
+      {canManageUsers && (
       <Card variant="elevated">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -282,13 +309,15 @@ const Settings = () => {
                 Users
               </CardTitle>
               <CardDescription className="hidden sm:block">
-                Manage admin users who can access the system.
+                Manage users who can access the system.
               </CardDescription>
             </div>
-            <Button variant="hero" onClick={() => setShowUserDialog(true)} className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Add User
-            </Button>
+            {canManageRoles && (
+              <Button variant="hero" onClick={() => setShowUserDialog(true)} className="w-full sm:w-auto">
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -320,7 +349,7 @@ const Settings = () => {
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>{user.username}</TableCell>
                       <TableCell>
-                        <span className="capitalize">{user.role}</span>
+                        {(user.roles ?? []).map((role: any) => role.name).join(", ") || "-"}
                       </TableCell>
                     </TableRow>
                   ))
@@ -332,6 +361,7 @@ const Settings = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Add Level Dialog */}
       <Dialog open={showLevelDialog} onOpenChange={setShowLevelDialog}>
@@ -423,6 +453,30 @@ const Settings = () => {
                     <FormControl>
                       <Input type="password" placeholder="Enter password" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={userForm.control}
+                name="role_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {roles.map((role: any) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
