@@ -3,13 +3,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { apiClient } from '@/lib/api';
 
-export type UserRole = 'admin' | 'parent' | 'coach';
+export interface Role {
+  id: string;
+  name: string;
+  is_system: boolean;
+  permissions: string[];
+}
 
 export interface User {
   id: string;
   username: string;
-  role: UserRole;
   name: string;
+  is_active: boolean;
+  roles: Role[];
+  permissions: string[];
   avatar?: string;
 }
 
@@ -19,6 +26,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,6 +82,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('academy_user');
   }, []);
 
+  const hasPermission = useCallback(
+    (permission: string) => !!user?.permissions?.includes(permission),
+    [user]
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -82,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
+        hasPermission,
       }}
     >
       {children}

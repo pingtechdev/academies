@@ -7,10 +7,13 @@ import { Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
-  const isDenied = !isAuthenticated || (!!user && user.role !== "admin");
+  // Any authenticated tenant user may enter the dashboard shell; which actions they can
+  // actually take is gated per-feature by permission checks (see useAuth().hasPermission),
+  // not by a single hardcoded role here -- the backend has no built-in "admin" role anymore.
+  const isDenied = !isAuthenticated;
 
   useEffect(() => {
     if (!isLoading && isDenied) {

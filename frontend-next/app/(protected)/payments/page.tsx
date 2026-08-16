@@ -73,7 +73,7 @@ type MarkPaidFormData = z.infer<typeof markPaidSchema>;
 type EditPaymentFormData = z.infer<typeof editPaymentSchema>;
 
 const PaymentsContent = () => {
-  const { user } = useAuth();
+  const { hasPermission } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -118,7 +118,7 @@ const PaymentsContent = () => {
     },
   });
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = hasPermission("payments:write");
 
   // Fetch payments
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({

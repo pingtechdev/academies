@@ -1,3 +1,5 @@
+const BASE_DOMAIN = 'victory.pingtech.dev';
+
 // Determine API base URL
 // 1. Use NEXT_PUBLIC_API_URL if explicitly set
 // 2. In production (on victory.pingtech.dev), use relative path
@@ -10,13 +12,31 @@ function getApiBaseUrl(): string {
   // Check if we're on the production domain
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (hostname === 'victory.pingtech.dev' || hostname.includes('pingtech.dev')) {
+    if (hostname === BASE_DOMAIN || hostname.includes('pingtech.dev')) {
       return '/api/v1'; // Relative path - same domain
     }
   }
 
   // Development default
   return 'http://localhost:8000/api/v1';
+}
+
+// The backend resolves which tenant a request belongs to from the `Host` header in
+// production (each academy lives at https://{slug}.victory.pingtech.dev). That only works
+// when the frontend and backend share an origin/subdomain. In local dev they usually don't
+// (e.g. frontend on localhost:3000, backend on localhost:8000), so the backend also accepts
+// an explicit `X-Tenant-Slug` header outside production -- this mirrors that on the client:
+// pull the slug from the current subdomain when there is one, falling back to
+// NEXT_PUBLIC_TENANT_SLUG for plain-localhost development.
+function getTenantSlug(): string | undefined {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const suffix = `.${BASE_DOMAIN}`;
+    if (hostname !== BASE_DOMAIN && hostname.endsWith(suffix)) {
+      return hostname.slice(0, -suffix.length);
+    }
+  }
+  return process.env.NEXT_PUBLIC_TENANT_SLUG || undefined;
 }
 
 const API_BASE_URL = getApiBaseUrl();
@@ -61,6 +81,11 @@ class ApiClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const tenantSlug = getTenantSlug();
+    if (tenantSlug) {
+      headers['X-Tenant-Slug'] = tenantSlug;
     }
 
     console.log('API Request:', { url, method: options.method || 'GET', headers }); // Debug log
@@ -237,6 +262,11 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Roles
+  async getRoles() {
+    return this.request<any[]>('/roles');
   }
 }
 
